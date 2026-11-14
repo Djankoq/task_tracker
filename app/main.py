@@ -4,7 +4,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.schema import CreateSchema
 from starlette.concurrency import run_in_threadpool
@@ -16,6 +19,8 @@ if __package__ in (None, ""):
 from app.config import get_app_port
 from app.database import Base, check_database, engine
 from app.models import AuthSession, Project, ProjectMember, Task, TaskChange, TaskComment, User
+from app.routers.projects import router as projects_router
+from app.routers.tasks import router as tasks_router
 from app.routers.users import router as users_router
 
 
@@ -60,6 +65,35 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Task Tracker", lifespan=lifespan)
 app.include_router(users_router)
+app.include_router(projects_router)
+app.include_router(tasks_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_: Request, error: RequestValidationError) -> JSONResponse:
+    issues = [
+        {"loc": item["loc"], "msg": item["msg"], "type": item["type"]}
+        for item in error.errors()
+    ]
+    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": issues})
+
+
+def openapi_schema():
+    schema = default_openapi()
+    # FastAPI auto-documents 422 for validated parameters, even with a custom exception handler.
+    for route in app.routes:
+        if not isinstance(route, APIRoute) or 400 not in route.responses:
+            continue
+        operations = schema["paths"][route.path_format]
+        for method in route.methods:
+            operations[method.lower()]["responses"].pop("422", None)
+    schema.get("components", {}).get("schemas", {}).pop("HTTPValidationError", None)
+    schema.get("components", {}).get("schemas", {}).pop("ValidationError", None)
+    return schema
+
+
+default_openapi = app.openapi
+app.openapi = openapi_schema
 
 
 @app.get("/health", tags=["health"])

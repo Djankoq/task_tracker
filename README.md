@@ -8,6 +8,7 @@ app/
 ├── main.py
 ├── config.py
 ├── database.py
+├── dependencies.py
 ├── models/
 │   ├── __init__.py
 │   ├── auth_session.py
@@ -20,18 +21,26 @@ app/
 │   └── user.py
 ├── schemas/
 │   ├── __init__.py
+│   ├── common.py
+│   ├── project.py
+│   ├── task.py
 │   └── user.py
 ├── routers/
 │   ├── __init__.py
+│   ├── projects.py
+│   ├── tasks.py
 │   └── users.py
 └── services/
     ├── __init__.py
+    ├── crud.py
     └── user_service.py
 .env
 .env.example
 requirements.txt
 01_schema.sql
 02_seed.sql
+postman/
+└── Task Tracker CRUD.postman_collection.json
 README.md
 ```
 
@@ -111,3 +120,31 @@ Invoke-RestMethod http://127.0.0.1:8001/users/me -Headers @{ Authorization = 'Be
 `GET /health` возвращает `{"status":"ok","database":"ok"}`. Приложение проверяет доступ к таблице `task_tracker.users` при запуске и при каждом запросе к `/health`. [Документация FastAPI по lifespan](https://fastapi.tiangolo.com/advanced/events/).
 
 `GET /users/me` возвращает профиль Ольги Соколовой после свежей загрузки тестовых данных. Тестовый токен действует сутки с момента загрузки. Запрос с отсутствующим, истёкшим или отозванным токеном возвращает HTTP 401. Интерактивная документация доступна по адресу [Swagger UI](http://127.0.0.1:8001/docs).
+
+## CRUD для проектов и задач
+
+| Метод | Проекты | Задачи | Успешный ответ |
+| --- | --- | --- | --- |
+| POST | `/projects/` | `/tasks/` | `201` |
+| GET | `/projects/` | `/tasks/` | `200`, список |
+| GET | `/projects/{project_id}` | `/tasks/{task_id}` | `200`, одна запись |
+| PUT | `/projects/{project_id}` | `/tasks/{task_id}` | `200`, полная замена редактируемых полей |
+| PATCH | `/projects/{project_id}` | `/tasks/{task_id}` | `200`, обновление переданных полей |
+| DELETE | `/projects/{project_id}` | `/tasks/{task_id}` | `204`, пустое тело |
+
+Оба списка принимают `offset` (от `0`, по умолчанию `0`) и `limit` (от `1` до `100`, по умолчанию `20`). Записи сортируются по возрастанию ID. Ошибка валидации возвращает `400`, отсутствующая запись — `404`, а связанные записи, препятствующие удалению, — `409`.
+
+В Swagger нажмите **Authorize** и введите токен сеанса. В свежей тестовой базе `test-admin-token` даёт права администратора для записи проектов, `test-active-token` — права руководителя проекта `1`, а `test-executor-token` — права исполнителя с `user_id=3`. Пользователь видит проекты и задачи, доступные по его роли, администратор может читать все записи. Задача создаётся в статусе `todo`. При возврате задачи из `in_review` в `in_progress` руководитель передаёт `review_reason`. PostgreSQL сохраняет причину в комментарии и записывает историю перехода в той же транзакции.
+
+## Коллекция Postman
+
+Для прогона создайте отдельную пустую тестовую базу и загрузите `01_schema.sql` и `02_seed.sql` по инструкции выше. Действующие демонстрационные сеансы рассчитаны на первые сутки после загрузки. Если локальная база была заполнена предыдущей версией `02_seed.sql`, используйте свежую тестовую базу с обновлённым скриптом.
+
+В Postman импортируйте [Task Tracker CRUD.postman_collection.json](postman/Task%20Tracker%20CRUD.postman_collection.json). В переменной коллекции `base_url` укажите адрес запущенного API и выполните **Run collection** в исходном порядке. Коллекция сохраняет ID созданных записей, проверяет их обновление и удаляет их в рамках прогона.
+
+Ту же коллекцию можно запустить из корня проекта через Postman CLI или Newman. [Документация Postman CLI](https://learning.postman.com/docs/postman-cli/postman-cli-run-collection), [документация Newman](https://learning.postman.com/docs/reference/newman-cli/installing-running-newman).
+
+```powershell
+npx --yes --package=postman-cli -- postman collection run 'postman/Task Tracker CRUD.postman_collection.json'
+npx --yes newman@6.2.2 run 'postman/Task Tracker CRUD.postman_collection.json'
+```

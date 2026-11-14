@@ -37,7 +37,9 @@ SELECT u.user_id, sha256(convert_to(seed.token, 'UTF8')),
        CURRENT_TIMESTAMP + seed.expiry,
        CASE WHEN seed.revoked THEN CURRENT_TIMESTAMP - interval '1 hour' END
 FROM (VALUES
+    ('admin', 'test-admin-token', interval '1 day', false),
     ('olga', 'test-active-token', interval '1 day', false),
+    ('anna', 'test-executor-token', interval '1 day', false),
     ('anna', 'test-expired-token', interval '-1 hour', false),
     ('ivan', 'test-revoked-token', interval '1 day', true)
 ) AS seed(login, token, expiry, revoked)
