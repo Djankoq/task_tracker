@@ -1,0 +1,7 @@
+.env
+.venv/
+.postgres-data/
+.postgres.log
+.uvicorn*.log
+__pycache__/
+*.py[cod]
