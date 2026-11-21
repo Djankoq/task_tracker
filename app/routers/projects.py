@@ -3,9 +3,9 @@ from sqlalchemy import select
 
 from app.dependencies import Administrator, CurrentUser, Database, ProjectPage, PathId
 from app.exceptions import NotFoundError
-from app.models import Project, ProjectMember
+from app.models import Project, ProjectMember, User
 from app.services.search import search_text
-from app.schemas.project import ProjectCreate, ProjectPatch, ProjectRead, ProjectReplace
+from app.schemas.project import ProjectCreate, ProjectMemberRead, ProjectPatch, ProjectRead, ProjectReplace
 from app.schemas.common import PageResponse
 from app.services.pagination import paginate
 from app.services.crud import CRUD_ERRORS, DELETE_CONFLICT, visible_projects, write_transaction
@@ -59,6 +59,21 @@ def list_projects(db: Database, user: CurrentUser, page: ProjectPage) -> PageRes
 @router.get("/{project_id}")
 def read_project(project_id: PathId, db: Database, user: CurrentUser) -> ProjectRead:
     return ProjectRead.model_validate(get_project(project_id, db, user))
+
+
+@router.get("/{project_id}/members")
+def list_project_members(project_id: PathId, db: Database, user: CurrentUser) -> list[ProjectMemberRead]:
+    get_project(project_id, db, user)
+    statement = (
+        select(
+            ProjectMember.project_id, ProjectMember.user_id, ProjectMember.role,
+            ProjectMember.removed_at, User.login, User.display_name,
+        )
+        .join(User, User.user_id == ProjectMember.user_id)
+        .where(ProjectMember.project_id == project_id, ProjectMember.removed_at.is_(None))
+        .order_by(ProjectMember.user_id)
+    )
+    return [ProjectMemberRead(**row) for row in db.execute(statement).mappings()]
 
 
 @router.put("/{project_id}")

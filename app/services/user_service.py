@@ -1,9 +1,16 @@
-from hashlib import sha256
+from hashlib import pbkdf2_hmac, sha256
+from secrets import token_hex
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import AuthSession, User
+
+
+def hash_password(password: str) -> str:
+    salt = token_hex(16)
+    digest = pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), 600_000)
+    return f"pbkdf2_sha256$600000${salt}${digest.hex()}"
 
 
 def get_user_by_session_token(db: Session, token: str) -> User | None:

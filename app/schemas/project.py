@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.common import DatabaseText, NonBlankText, PatchModel, RecordId
@@ -25,3 +28,12 @@ class ProjectRead(BaseModel):
     project_id: RecordId
     name: NonBlankText
     description: DatabaseText
+
+
+class ProjectMemberRead(BaseModel):
+    project_id: RecordId
+    user_id: RecordId
+    role: Literal["manager", "executor", "observer"]
+    removed_at: datetime | None
+    login: str
+    display_name: str
