@@ -33,7 +33,7 @@ def test_engine():
         db = engine.raw_connection()
         try:
             with db.cursor() as cursor:
-                for script in ("01_schema.sql", "02_seed.sql"):
+                for script in ("01_schema.sql", "02_seed.sql", "migrations/001_search_indexes.up.sql"):
                     cursor.execute((root / script).read_text(encoding="utf-8"))
         finally:
             db.close()

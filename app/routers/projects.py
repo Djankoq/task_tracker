@@ -3,7 +3,8 @@ from sqlalchemy import select
 
 from app.dependencies import Administrator, CurrentUser, Database, ProjectPage, PathId
 from app.exceptions import NotFoundError
-from app.models import Project
+from app.models import Project, ProjectMember
+from app.services.search import search_text
 from app.schemas.project import ProjectCreate, ProjectPatch, ProjectRead, ProjectReplace
 from app.schemas.common import PageResponse
 from app.services.pagination import paginate
@@ -41,6 +42,17 @@ def list_projects(db: Database, user: CurrentUser, page: ProjectPage) -> PageRes
     statement = select(Project)
     if not user.is_admin:
         statement = statement.where(Project.project_id.in_(visible_projects(user)))
+    if page.name is not None:
+        statement = statement.where(Project.name == page.name)
+    if page.member_id is not None:
+        members = select(ProjectMember.project_id).where(
+            ProjectMember.user_id == page.member_id, ProjectMember.removed_at.is_(None),
+        )
+        statement = statement.where(Project.project_id.in_(members))
+    if page.has_tasks is not None:
+        has_tasks = Project.tasks.any()
+        statement = statement.where(has_tasks if page.has_tasks else ~has_tasks)
+    statement = search_text(statement, page.search, Project.name, Project.description)
     return paginate(db, statement, page, SORT_COLUMNS, Project.project_id, ProjectRead)
 
 

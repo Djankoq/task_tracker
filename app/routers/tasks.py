@@ -9,6 +9,7 @@ from app.models import Project, Task
 from app.schemas.task import TaskCreate, TaskPatch, TaskRead, TaskReplace
 from app.schemas.common import PageResponse
 from app.services.pagination import paginate
+from app.services.search import search_text
 from app.services.crud import (
     CRUD_ERRORS,
     DELETE_CONFLICT,
@@ -63,6 +64,15 @@ def list_tasks(db: Database, user: CurrentUser, page: TaskPage) -> PageResponse[
     statement = select(Task)
     if not user.is_admin:
         statement = statement.where(Task.project_id.in_(visible_projects(user)))
+    for field in ("project_id", "assignee_id", "status", "priority"):
+        value = getattr(page, field)
+        if value is not None:
+            statement = statement.where(getattr(Task, field) == value)
+    if page.due_from is not None:
+        statement = statement.where(Task.due_at >= page.due_from)
+    if page.due_to is not None:
+        statement = statement.where(Task.due_at <= page.due_to)
+    statement = search_text(statement, page.search, Task.title, Task.description)
     return paginate(db, statement, page, SORT_COLUMNS, Task.task_id, TaskRead)
 
 

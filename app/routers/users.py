@@ -2,7 +2,8 @@ from fastapi import APIRouter
 from sqlalchemy import select
 
 from app.dependencies import Administrator, CurrentUser, Database, UserPage
-from app.models import User
+from app.models import ProjectMember, User
+from app.services.search import search_text
 from app.schemas.common import PageResponse
 from app.schemas.user import UserRead
 from app.services.crud import CRUD_ERRORS
@@ -18,7 +19,18 @@ SORT_COLUMNS = {
 
 @router.get("/")
 def list_users(db: Database, _: Administrator, page: UserPage) -> PageResponse[UserRead]:
-    return paginate(db, select(User), page, SORT_COLUMNS, User.user_id, UserRead)
+    statement = select(User)
+    if page.is_active is not None:
+        statement = statement.where(User.is_active == page.is_active)
+    if page.is_admin is not None:
+        statement = statement.where(User.is_admin == page.is_admin)
+    if page.project_id is not None:
+        members = select(ProjectMember.user_id).where(
+            ProjectMember.project_id == page.project_id, ProjectMember.removed_at.is_(None),
+        )
+        statement = statement.where(User.user_id.in_(members))
+    statement = search_text(statement, page.search, User.login, User.display_name)
+    return paginate(db, statement, page, SORT_COLUMNS, User.user_id, UserRead)
 
 
 @router.get("/me", response_model=UserRead)

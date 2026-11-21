@@ -198,7 +198,7 @@ def test_openapi_contract():
     schema = app.openapi()
     for path in ("/users/", "/projects/", "/tasks/"):
         operation = schema["paths"][path]["get"]
-        assert {p["name"] for p in operation["parameters"]} == {"page", "per_page", "sort_by", "sort_order"}
+        assert {p["name"] for p in operation["parameters"]} >= {"page", "per_page", "sort_by", "sort_order", "search"}
         assert "400" in operation["responses"]
         assert "422" not in operation["responses"]
     assert "ErrorResponse" in schema["components"]["schemas"]

@@ -20,6 +20,7 @@ from app.error_handlers import register_error_handlers
 from app.exceptions import ServiceUnavailableError
 from app.models import AuthSession, Project, ProjectMember, Task, TaskChange, TaskComment, User
 from app.routers.projects import router as projects_router
+from app.routers.analytics import router as analytics_router
 from app.routers.tasks import router as tasks_router
 from app.routers.users import router as users_router
 from app.schemas.common import ErrorResponse
@@ -72,6 +73,7 @@ register_error_handlers(app)
 app.include_router(users_router)
 app.include_router(projects_router)
 app.include_router(tasks_router)
+app.include_router(analytics_router)
 
 
 def openapi_schema():
