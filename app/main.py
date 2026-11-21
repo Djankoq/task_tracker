@@ -4,9 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.schema import CreateSchema
@@ -18,10 +16,13 @@ if __package__ in (None, ""):
 
 from app.config import get_app_port
 from app.database import Base, check_database, engine
+from app.error_handlers import register_error_handlers
+from app.exceptions import ServiceUnavailableError
 from app.models import AuthSession, Project, ProjectMember, Task, TaskChange, TaskComment, User
 from app.routers.projects import router as projects_router
 from app.routers.tasks import router as tasks_router
 from app.routers.users import router as users_router
+from app.schemas.common import ErrorResponse
 
 
 def prepare_database() -> None:
@@ -63,19 +64,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await run_in_threadpool(engine.dispose)
 
 
-app = FastAPI(title="Task Tracker", lifespan=lifespan)
+app = FastAPI(
+    title="Task Tracker", lifespan=lifespan,
+    responses={500: {"model": ErrorResponse, "description": "Internal server error"}},
+)
+register_error_handlers(app)
 app.include_router(users_router)
 app.include_router(projects_router)
 app.include_router(tasks_router)
-
-
-@app.exception_handler(RequestValidationError)
-async def invalid_request(_: Request, error: RequestValidationError) -> JSONResponse:
-    issues = [
-        {"loc": item["loc"], "msg": item["msg"], "type": item["type"]}
-        for item in error.errors()
-    ]
-    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"detail": issues})
 
 
 def openapi_schema():
@@ -96,15 +92,12 @@ default_openapi = app.openapi
 app.openapi = openapi_schema
 
 
-@app.get("/health", tags=["health"])
+@app.get("/health", tags=["health"], responses={503: {"model": ErrorResponse}})
 def health() -> dict[str, str]:
     try:
         check_database()
     except SQLAlchemyError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database unavailable",
-        ) from None
+        raise ServiceUnavailableError("Database unavailable") from None
     return {"status": "ok", "database": "ok"}
 
 

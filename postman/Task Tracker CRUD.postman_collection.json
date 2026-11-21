@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Task Tracker \u2014 CRUD",
-    "description": "Run in order against a test database populated with 01_schema.sql and 02_seed.sql. Tokens below are public demo values from the seed script. Projects and tasks created by the run are deleted. Existing fixtures are used for read and conflict checks.",
+    "name": "Task Tracker — CRUD",
+    "description": "Task Tracker: CRUD, page/per_page pagination, allowlisted sorting and unified errors. Run against a fresh seeded test database in collection order.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -212,7 +212,7 @@
           }
         },
         {
-          "name": "GET OpenAPI \u2014 all CRUD operations",
+          "name": "GET OpenAPI — all CRUD operations",
           "event": [
             {
               "listen": "test",
@@ -226,7 +226,7 @@
                   "        const uri = '/' + entity + '/';",
                   "        pm.expect(paths[uri]).to.have.all.keys('get', 'post');",
                   "        pm.expect(paths[uri].post.responses).to.have.property('201');",
-                  "        pm.expect(paths[uri].get.parameters.map(parameter => parameter.name)).to.include.members(['offset', 'limit']);",
+                  "        pm.expect(paths[uri].get.parameters.map(parameter => parameter.name)).to.include.members(['page', 'per_page', 'sort_by', 'sort_order']);",
                   "    });",
                   "    pm.test(entity + ' item operations use the expected status codes', () => {",
                   "        const operations = paths['/' + entity + '/{' + id + '}'];",
@@ -248,6 +248,1417 @@
             "url": "{{base_url}}/openapi.json",
             "auth": {
               "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "GET users - assignment example",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(2); pm.expect(body.per_page).to.eql(5);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"No sensitive user fields\", () => body.items.forEach(user => pm.expect(user).to.have.all.keys(\"user_id\", \"login\", \"display_name\", \"is_admin\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?page=2&per_page=5&sort_by=name&sort_order=desc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - administrator required",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - no session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pagination, sorting and invalid query parameters",
+      "item": [
+        {
+          "name": "GET users - defaults",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(10);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - maximum page size and descending sort",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(100);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"Descending IDs\", () => { for(let i=1;i<body.items.length;i++) pm.expect(body.items[i-1].user_id).to.be.above(body.items[i].user_id); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?per_page=100&sort_by=user_id&sort_order=desc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid page=0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?page=0",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid page=-1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?page=-1",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid page=abc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?page=abc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid page=1.5",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?page=1.5",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid per_page=0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?per_page=0",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid per_page=101",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?per_page=101",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid per_page=abc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?per_page=abc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid sort_by=password_hash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?sort_by=password_hash",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid sort_by=unknown",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?sort_by=unknown",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid sort_order=invalid",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?sort_order=invalid",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid sort_order=DESC",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?sort_order=DESC",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET users - invalid page=9223372036854775807&per_page=100",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/users/?page=9223372036854775807&per_page=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - defaults",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(10);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - maximum page size and descending sort",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(100);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"Descending IDs\", () => { for(let i=1;i<body.items.length;i++) pm.expect(body.items[i-1].project_id).to.be.above(body.items[i].project_id); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?per_page=100&sort_by=project_id&sort_order=desc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid page=0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?page=0",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid page=-1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?page=-1",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid page=abc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?page=abc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid page=1.5",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?page=1.5",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid per_page=0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?per_page=0",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid per_page=101",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?per_page=101",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid per_page=abc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?per_page=abc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid sort_by=password_hash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?sort_by=password_hash",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid sort_by=unknown",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?sort_by=unknown",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid sort_order=invalid",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?sort_order=invalid",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid sort_order=DESC",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?sort_order=DESC",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET projects - invalid page=9223372036854775807&per_page=100",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/projects/?page=9223372036854775807&per_page=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - defaults",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(10);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - maximum page size and descending sort",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(100);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"Descending IDs\", () => { for(let i=1;i<body.items.length;i++) pm.expect(body.items[i-1].task_id).to.be.above(body.items[i].task_id); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?per_page=100&sort_by=task_id&sort_order=desc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid page=0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?page=0",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid page=-1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?page=-1",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid page=abc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?page=abc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid page=1.5",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?page=1.5",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid per_page=0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?per_page=0",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid per_page=101",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?per_page=101",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid per_page=abc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?per_page=abc",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid sort_by=password_hash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?sort_by=password_hash",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid sort_by=unknown",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?sort_by=unknown",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid sort_order=invalid",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?sort_order=invalid",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid sort_order=DESC",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?sort_order=DESC",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET tasks - invalid page=9223372036854775807&per_page=100",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Query validation details\", () => { const issues=pm.response.json().details; pm.expect(issues).to.be.an(\"array\").that.is.not.empty; pm.expect(issues[0].loc[0]).to.eql(\"query\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/tasks/?page=9223372036854775807&per_page=100",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{manager_token}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         }
@@ -289,7 +1700,7 @@
           }
         },
         {
-          "name": "GET list \u2014 first page",
+          "name": "GET list — first page",
           "event": [
             {
               "listen": "test",
@@ -297,9 +1708,17 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "const page = pm.response.json();",
-                  "pm.test(\"First page contains one record\", () => { pm.expect(page).to.be.an('array').with.lengthOf(1); });",
-                  "if (page.length) pm.collectionVariables.set(\"first_project_id\", page[0].project_id);"
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(1);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.collectionVariables.set(\"first_project_id\", body.items[0].project_id);",
+                  "pm.collectionVariables.set(\"project_total\", body.total);"
                 ]
               }
             }
@@ -307,11 +1726,11 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/projects/?offset=0&limit=1"
+            "url": "{{base_url}}/projects/?page=1&per_page=1"
           }
         },
         {
-          "name": "GET list \u2014 second page",
+          "name": "GET list — second page",
           "event": [
             {
               "listen": "test",
@@ -319,8 +1738,16 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "const page = pm.response.json();",
-                  "pm.test(\"Second page contains a different record\", () => { pm.expect(page).to.be.an('array').with.lengthOf(1); pm.expect(page[0].project_id).to.be.above(Number(pm.collectionVariables.get('first_project_id'))); });"
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(2); pm.expect(body.per_page).to.eql(1);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"Next record and same total\", () => { pm.expect(body.items[0].project_id).to.be.above(Number(pm.collectionVariables.get(\"first_project_id\"))); pm.expect(body.total).to.eql(Number(pm.collectionVariables.get(\"project_total\"))); });"
                 ]
               }
             }
@@ -328,11 +1755,11 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/projects/?offset=1&limit=1"
+            "url": "{{base_url}}/projects/?page=2&per_page=1"
           }
         },
         {
-          "name": "GET list \u2014 offset beyond the data",
+          "name": "GET list - page beyond the data",
           "event": [
             {
               "listen": "test",
@@ -340,7 +1767,16 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Page is empty\", () => { pm.expect(pm.response.json()).to.eql([]); });"
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1000000); pm.expect(body.per_page).to.eql(1);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"Empty page preserves total\", () => { pm.expect(body.items).to.eql([]); pm.expect(body.total).to.be.above(0); });"
                 ]
               }
             }
@@ -348,7 +1784,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/projects/?offset=1000000&limit=1"
+            "url": "{{base_url}}/projects/?page=1000000&per_page=1"
           }
         },
         {
@@ -374,7 +1810,7 @@
           }
         },
         {
-          "name": "PUT project \u2014 missing required field",
+          "name": "PUT project — missing required field",
           "event": [
             {
               "listen": "test",
@@ -382,7 +1818,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -434,7 +1870,7 @@
           }
         },
         {
-          "name": "PATCH project \u2014 null field",
+          "name": "PATCH project — null field",
           "event": [
             {
               "listen": "test",
@@ -442,7 +1878,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -494,7 +1930,7 @@
           }
         },
         {
-          "name": "GET project \u2014 verify stored update",
+          "name": "GET project — verify stored update",
           "event": [
             {
               "listen": "test",
@@ -516,7 +1952,7 @@
           }
         },
         {
-          "name": "POST project \u2014 blank name",
+          "name": "POST project — blank name",
           "event": [
             {
               "listen": "test",
@@ -524,7 +1960,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -545,7 +1981,7 @@
           }
         },
         {
-          "name": "POST project \u2014 invalid JSON",
+          "name": "POST project — invalid JSON",
           "event": [
             {
               "listen": "test",
@@ -553,7 +1989,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -574,7 +2010,7 @@
           }
         },
         {
-          "name": "GET projects \u2014 invalid limit",
+          "name": "GET projects - invalid per_page",
           "event": [
             {
               "listen": "test",
@@ -582,7 +2018,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -590,11 +2026,11 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/projects/?limit=101"
+            "url": "{{base_url}}/projects/?per_page=101"
           }
         },
         {
-          "name": "POST project \u2014 manager forbidden",
+          "name": "POST project — manager forbidden",
           "event": [
             {
               "listen": "test",
@@ -602,7 +2038,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -633,7 +2069,7 @@
           }
         },
         {
-          "name": "GET project \u2014 inaccessible to non-member",
+          "name": "GET project — inaccessible to non-member",
           "event": [
             {
               "listen": "test",
@@ -641,7 +2077,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -663,7 +2099,7 @@
           }
         },
         {
-          "name": "DELETE project \u2014 related records",
+          "name": "DELETE project — related records",
           "event": [
             {
               "listen": "test",
@@ -671,7 +2107,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -711,7 +2147,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -731,7 +2167,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -760,7 +2196,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -789,7 +2225,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -849,7 +2285,7 @@
           }
         },
         {
-          "name": "GET list \u2014 first page",
+          "name": "GET list — first page",
           "event": [
             {
               "listen": "test",
@@ -857,9 +2293,17 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "const page = pm.response.json();",
-                  "pm.test(\"First page contains one record\", () => { pm.expect(page).to.be.an('array').with.lengthOf(1); });",
-                  "if (page.length) pm.collectionVariables.set(\"first_task_id\", page[0].task_id);"
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1); pm.expect(body.per_page).to.eql(1);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.collectionVariables.set(\"first_task_id\", body.items[0].task_id);",
+                  "pm.collectionVariables.set(\"task_total\", body.total);"
                 ]
               }
             }
@@ -867,7 +2311,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/tasks/?offset=0&limit=1",
+            "url": "{{base_url}}/tasks/?page=1&per_page=1",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -881,7 +2325,7 @@
           }
         },
         {
-          "name": "GET list \u2014 second page",
+          "name": "GET list — second page",
           "event": [
             {
               "listen": "test",
@@ -889,8 +2333,16 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "const page = pm.response.json();",
-                  "pm.test(\"Second page contains a different record\", () => { pm.expect(page).to.be.an('array').with.lengthOf(1); pm.expect(page[0].task_id).to.be.above(Number(pm.collectionVariables.get('first_task_id'))); });"
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(2); pm.expect(body.per_page).to.eql(1);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"Next record and same total\", () => { pm.expect(body.items[0].task_id).to.be.above(Number(pm.collectionVariables.get(\"first_task_id\"))); pm.expect(body.total).to.eql(Number(pm.collectionVariables.get(\"task_total\"))); });"
                 ]
               }
             }
@@ -898,7 +2350,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/tasks/?offset=1&limit=1",
+            "url": "{{base_url}}/tasks/?page=2&per_page=1",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -912,7 +2364,7 @@
           }
         },
         {
-          "name": "GET list \u2014 offset beyond the data",
+          "name": "GET list - page beyond the data",
           "event": [
             {
               "listen": "test",
@@ -920,7 +2372,16 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Page is empty\", () => { pm.expect(pm.response.json()).to.eql([]); });"
+                  "const body = pm.response.json();",
+                  "pm.test(\"Pagination metadata\", () => {",
+                  "  pm.expect(body).to.have.all.keys(\"items\", \"total\", \"page\", \"per_page\", \"total_pages\");",
+                  "  pm.expect(body.page).to.eql(1000000); pm.expect(body.per_page).to.eql(1);",
+                  "  pm.expect(body.total).to.be.at.least(0); pm.expect(Number.isInteger(body.total)).to.eql(true);",
+                  "  pm.expect(body.total_pages).to.eql(Math.ceil(body.total / body.per_page));",
+                  "  pm.expect(body.items).to.be.an(\"array\"); pm.expect(body.items.length).to.be.at.most(body.per_page);",
+                  "  pm.expect(body.items.length).to.eql(Math.max(0, Math.min(body.per_page, body.total - (body.page - 1) * body.per_page)));",
+                  "});",
+                  "pm.test(\"Empty page preserves total\", () => { pm.expect(body.items).to.eql([]); pm.expect(body.total).to.be.above(0); });"
                 ]
               }
             }
@@ -928,7 +2389,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/tasks/?offset=1000000&limit=1",
+            "url": "{{base_url}}/tasks/?page=1000000&per_page=1",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -974,7 +2435,7 @@
           }
         },
         {
-          "name": "PUT task \u2014 missing fields",
+          "name": "PUT task — missing fields",
           "event": [
             {
               "listen": "test",
@@ -982,7 +2443,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -1054,7 +2515,7 @@
           }
         },
         {
-          "name": "PATCH task \u2014 invalid enum",
+          "name": "PATCH task — invalid enum",
           "event": [
             {
               "listen": "test",
@@ -1062,7 +2523,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -1093,7 +2554,7 @@
           }
         },
         {
-          "name": "PATCH task \u2014 project is immutable",
+          "name": "PATCH task — project is immutable",
           "event": [
             {
               "listen": "test",
@@ -1101,7 +2562,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -1132,7 +2593,7 @@
           }
         },
         {
-          "name": "PATCH task \u2014 invalid status transition",
+          "name": "PATCH task — invalid status transition",
           "event": [
             {
               "listen": "test",
@@ -1140,7 +2601,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1171,7 +2632,7 @@
           }
         },
         {
-          "name": "PATCH task \u2014 executor cannot edit description",
+          "name": "PATCH task — executor cannot edit description",
           "event": [
             {
               "listen": "test",
@@ -1179,7 +2640,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1251,7 +2712,7 @@
           }
         },
         {
-          "name": "GET task \u2014 verify stored update",
+          "name": "GET task — verify stored update",
           "event": [
             {
               "listen": "test",
@@ -1283,7 +2744,7 @@
           }
         },
         {
-          "name": "POST task \u2014 missing project",
+          "name": "POST task — missing project",
           "event": [
             {
               "listen": "test",
@@ -1291,7 +2752,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1322,7 +2783,7 @@
           }
         },
         {
-          "name": "POST task \u2014 assignee is not an executor",
+          "name": "POST task — assignee is not an executor",
           "event": [
             {
               "listen": "test",
@@ -1330,7 +2791,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1361,7 +2822,7 @@
           }
         },
         {
-          "name": "POST task \u2014 date without timezone",
+          "name": "POST task — date without timezone",
           "event": [
             {
               "listen": "test",
@@ -1369,7 +2830,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -1400,7 +2861,7 @@
           }
         },
         {
-          "name": "GET tasks \u2014 invalid offset",
+          "name": "GET tasks - invalid page",
           "event": [
             {
               "listen": "test",
@@ -1408,7 +2869,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -1416,7 +2877,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/tasks/?offset=-1",
+            "url": "{{base_url}}/tasks/?page=0",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1430,7 +2891,7 @@
           }
         },
         {
-          "name": "GET task \u2014 invalid ID",
+          "name": "GET task — invalid ID",
           "event": [
             {
               "listen": "test",
@@ -1438,7 +2899,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().detail).to.be.an('array').that.is.not.empty; });"
+                  "pm.test(\"Structured validation errors\", () => { pm.expect(pm.response.json().details).to.be.an('array').that.is.not.empty; });"
                 ]
               }
             }
@@ -1460,7 +2921,7 @@
           }
         },
         {
-          "name": "GET task \u2014 no session",
+          "name": "GET task — no session",
           "event": [
             {
               "listen": "test",
@@ -1468,7 +2929,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1483,7 +2944,7 @@
           }
         },
         {
-          "name": "DELETE task \u2014 executor forbidden",
+          "name": "DELETE task — executor forbidden",
           "event": [
             {
               "listen": "test",
@@ -1491,7 +2952,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1521,7 +2982,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
-                  "const seedTask = pm.response.json().find(task => task.project_id === Number(pm.variables.get(\"fixture_project_id\")) && task.title === \"\u0421\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u0442\u044c \u043c\u0430\u043a\u0435\u0442\");",
+                  "const seedTask = pm.response.json().items.find(task => task.project_id === Number(pm.variables.get(\"fixture_project_id\")) && task.title === \"Согласовать макет\");",
                   "pm.test(\"Seed task exists\", () => pm.expect(seedTask).to.be.an(\"object\"));",
                   "pm.collectionVariables.set(\"fixture_task_with_history\", seedTask?.task_id ?? \"missing\");"
                 ]
@@ -1531,7 +2992,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/tasks/?limit=100",
+            "url": "{{base_url}}/tasks/?per_page=100",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1545,7 +3006,7 @@
           }
         },
         {
-          "name": "DELETE task \u2014 comments or history",
+          "name": "DELETE task — comments or history",
           "event": [
             {
               "listen": "test",
@@ -1553,7 +3014,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1613,7 +3074,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1643,7 +3104,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1682,7 +3143,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1721,7 +3182,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));",
-                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().detail).to.be.a('string').that.is.not.empty; });"
+                  "pm.test(\"Readable error message\", () => { pm.expect(pm.response.json().message).to.be.a('string').that.is.not.empty; });"
                 ]
               }
             }
@@ -1743,6 +3204,27 @@
           }
         }
       ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.response.code >= 400) {",
+          "  pm.test(\"Unified ErrorResponse\", () => {",
+          "    const error = pm.response.json();",
+          "    pm.expect(error).to.have.all.keys(\"code\", \"message\", \"details\");",
+          "    const codes = {400:\"validation_error\",401:\"unauthorized\",403:\"forbidden\",404:\"not_found\",409:\"conflict\",500:\"internal_error\",503:\"service_unavailable\"};",
+          "    pm.expect(error.code).to.eql(codes[pm.response.code]);",
+          "    pm.expect(error.message).to.be.a(\"string\").that.is.not.empty;",
+          "    pm.expect(error.details).to.be.an(\"array\");",
+          "    error.details.forEach(issue => { pm.expect(issue).to.have.all.keys(\"loc\", \"msg\", \"type\"); });",
+          "  });",
+          "}"
+        ]
+      }
     }
   ]
 }

@@ -1,13 +1,17 @@
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Response, status
 from sqlalchemy import select
 
-from app.dependencies import Administrator, CurrentUser, Database, Page, PathId
+from app.dependencies import Administrator, CurrentUser, Database, ProjectPage, PathId
+from app.exceptions import NotFoundError
 from app.models import Project
 from app.schemas.project import ProjectCreate, ProjectPatch, ProjectRead, ProjectReplace
+from app.schemas.common import PageResponse
+from app.services.pagination import paginate
 from app.services.crud import CRUD_ERRORS, DELETE_CONFLICT, visible_projects, write_transaction
 
 
 router = APIRouter(prefix="/projects", tags=["projects"], responses=CRUD_ERRORS)
+SORT_COLUMNS = {"project_id": Project.project_id, "name": Project.name, "description": Project.description}
 
 
 def get_project(project_id: int, db: Database, user: CurrentUser, *, lock: bool = False) -> Project:
@@ -18,7 +22,7 @@ def get_project(project_id: int, db: Database, user: CurrentUser, *, lock: bool 
         statement = statement.with_for_update()
     project = db.scalar(statement)
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+        raise NotFoundError("Project not found")
     return project
 
 
@@ -33,11 +37,11 @@ def create_project(payload: ProjectCreate, db: Database, _: Administrator) -> Pr
 
 
 @router.get("/")
-def list_projects(db: Database, user: CurrentUser, page: Page) -> list[ProjectRead]:
-    statement = select(Project).order_by(Project.project_id).offset(page.offset).limit(page.limit)
+def list_projects(db: Database, user: CurrentUser, page: ProjectPage) -> PageResponse[ProjectRead]:
+    statement = select(Project)
     if not user.is_admin:
         statement = statement.where(Project.project_id.in_(visible_projects(user)))
-    return [ProjectRead.model_validate(project) for project in db.scalars(statement)]
+    return paginate(db, statement, page, SORT_COLUMNS, Project.project_id, ProjectRead)
 
 
 @router.get("/{project_id}")
@@ -63,7 +67,7 @@ def patch_project(
 ) -> ProjectRead:
     with write_transaction(db):
         project = get_project(project_id, db, user, lock=True)
-        for field, value in payload.items():
+        for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(project, field, value)
         result = ProjectRead.model_validate(project)
     return result

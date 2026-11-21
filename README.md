@@ -22,6 +22,7 @@ app/
 ├── schemas/
 │   ├── __init__.py
 │   ├── common.py
+│   ├── pagination.py
 │   ├── project.py
 │   ├── task.py
 │   └── user.py
@@ -33,6 +34,7 @@ app/
 └── services/
     ├── __init__.py
     ├── crud.py
+    ├── pagination.py
     └── user_service.py
 .env
 .env.example
@@ -126,13 +128,60 @@ Invoke-RestMethod http://127.0.0.1:8001/users/me -Headers @{ Authorization = 'Be
 | Метод | Проекты | Задачи | Успешный ответ |
 | --- | --- | --- | --- |
 | POST | `/projects/` | `/tasks/` | `201` |
-| GET | `/projects/` | `/tasks/` | `200`, список |
+| GET | `/projects/` | `/tasks/` | `200`, объект с `items` и метаданными |
 | GET | `/projects/{project_id}` | `/tasks/{task_id}` | `200`, одна запись |
 | PUT | `/projects/{project_id}` | `/tasks/{task_id}` | `200`, полная замена редактируемых полей |
 | PATCH | `/projects/{project_id}` | `/tasks/{task_id}` | `200`, обновление переданных полей |
 | DELETE | `/projects/{project_id}` | `/tasks/{task_id}` | `204`, пустое тело |
 
-Оба списка принимают `offset` (от `0`, по умолчанию `0`) и `limit` (от `1` до `100`, по умолчанию `20`). Записи сортируются по возрастанию ID. Ошибка валидации возвращает `400`, отсутствующая запись — `404`, а связанные записи, препятствующие удалению, — `409`.
+Списки `/users/`, `/projects/` и `/tasks/` принимают `page` (от `1`, по умолчанию `1`), `per_page` (от `1` до `100`, по умолчанию `10`), `sort_by` и `sort_order` (`asc` или `desc`, по умолчанию `asc`). Старые `offset/limit` заменены этими параметрами. Неизвестные query-параметры возвращают `400`.
+
+| Список | Разрешённые `sort_by` | По умолчанию |
+| --- | --- | --- |
+| `/users/` | `user_id`, `login`, `display_name`, `name`, `is_admin` | `user_id` |
+| `/projects/` | `project_id`, `name`, `description` | `project_id` |
+| `/tasks/` | `task_id`, `project_id`, `assignee_id`, `title`, `due_at`, `priority`, `status` | `task_id` |
+
+`name` у пользователей — псевдоним `display_name`. Список пользователей доступен администратору и содержит только публичные поля профиля. `/users/me` по-прежнему доступен любому пользователю с действующим сеансом. При совпадении значений сортировки записи дополнительно упорядочиваются по ID по возрастанию. Приоритет и статус сортируются в порядке PostgreSQL ENUM: `low → medium → high` и `todo → in_progress → in_review → done`.
+
+```powershell
+Invoke-RestMethod 'http://127.0.0.1:8001/users/?page=2&per_page=5&sort_by=name&sort_order=desc' -Headers @{ Authorization = 'Bearer test-admin-token' }
+```
+
+На свежих тестовых данных ответ содержит два пользователя в `items` и метаданные:
+
+```json
+{
+  "items": [
+    {"user_id": 3, "login": "anna", "display_name": "Анна Орлова", "is_admin": false},
+    {"user_id": 1, "login": "admin", "display_name": "Алексей Волков", "is_admin": true}
+  ],
+  "total": 7,
+  "page": 2,
+  "per_page": 5,
+  "total_pages": 2
+}
+```
+
+Порядок строк зависит от collation базы PostgreSQL; состав `items` в примере иллюстративный. `total` считает только доступные пользователю записи до применения пагинации. Страница за пределами данных возвращает `items: []` с исходным `total`. Для пустого списка `total_pages: 0`.
+
+## Валидация и единый формат ошибок
+
+Исключения `NotFoundError`, `ConflictError`, `ValidationError`, `UnauthorizedError`, `ForbiddenError` и `ServiceUnavailableError` определены в `app/exceptions.py`. Глобальные обработчики в `app/error_handlers.py` преобразуют их, ошибки валидации FastAPI и ошибки маршрутизации в `ErrorResponse`:
+
+```json
+{
+  "code": "validation_error",
+  "message": "Invalid request data",
+  "details": [
+    {"loc": ["query", "per_page"], "msg": "Input should be less than or equal to 100", "type": "less_than_equal"}
+  ]
+}
+```
+
+`details` всегда является массивом; для ошибок без привязки к полям он пустой. Невалидные запросы возвращают `400` (`validation_error`), отсутствие сеанса — `401` (`unauthorized`), недостаточные права — `403` (`forbidden`), отсутствие записи — `404` (`not_found`), конфликт уникальности или удаления связанных записей — `409` (`conflict`). `/health` возвращает `503` (`service_unavailable`), когда база недоступна. Неожиданные ошибки возвращают `500` (`internal_error`) без внутренних данных; подробности записываются в журнал сервера. `401` сохраняет заголовок `WWW-Authenticate: Bearer`.
+
+Схемы Pydantic проверяют положительные ID в диапазоне PostgreSQL `bigint`, непустой текст, отсутствие нулевого байта, приоритеты и статусы из заданных наборов, дату со смещением часового пояса, неизвестные поля. PATCH требует хотя бы одно поле и запрещает `null` для обязательных данных. `review_reason`, если задана, должна быть непустой и передаваться со статусом `in_progress`. Просроченные даты допустимы: проект поддерживает учёт просроченных задач. Проверки роли исполнителя, разрешений, переходов статуса и обязательной причины возврата с ревью выполняются с учётом состояния БД; триггеры PostgreSQL обеспечивают их в транзакции.
 
 В Swagger нажмите **Authorize** и введите токен сеанса. В свежей тестовой базе `test-admin-token` даёт права администратора для записи проектов, `test-active-token` — права руководителя проекта `1`, а `test-executor-token` — права исполнителя с `user_id=3`. Пользователь видит проекты и задачи, доступные по его роли, администратор может читать все записи. Задача создаётся в статусе `todo`. При возврате задачи из `in_review` в `in_progress` руководитель передаёт `review_reason`. PostgreSQL сохраняет причину в комментарии и записывает историю перехода в той же транзакции.
 
@@ -142,9 +191,63 @@ Invoke-RestMethod http://127.0.0.1:8001/users/me -Headers @{ Authorization = 'Be
 
 В Postman импортируйте [Task Tracker CRUD.postman_collection.json](postman/Task%20Tracker%20CRUD.postman_collection.json). В переменной коллекции `base_url` укажите адрес запущенного API и выполните **Run collection** в исходном порядке. Коллекция сохраняет ID созданных записей, проверяет их обновление и удаляет их в рамках прогона.
 
+Коллекция содержит 99 запросов: пример `/users/?page=2&per_page=5&sort_by=name&sort_order=desc`, страницы проектов и задач, значения по умолчанию, размер страницы `100`, сортировку по ID в обратном порядке, пустую страницу, ошибки диапазонов, форматов и неизвестных полей сортировки. Общий тест проверяет `ErrorResponse` для всех ответов с ошибками. CRUD-сценарии проверяют коды `400/401/403/404/409`, включая ошибки бизнес-правил PostgreSQL.
+
 Ту же коллекцию можно запустить из корня проекта через Postman CLI или Newman. [Документация Postman CLI](https://learning.postman.com/docs/postman-cli/postman-cli-run-collection), [документация Newman](https://learning.postman.com/docs/reference/newman-cli/installing-running-newman).
 
 ```powershell
 npx --yes --package=postman-cli -- postman collection run 'postman/Task Tracker CRUD.postman_collection.json'
 npx --yes newman@6.2.2 run 'postman/Task Tracker CRUD.postman_collection.json'
 ```
+
+## Автоматические тесты
+
+Запустите PostgreSQL и установите зависимости для разработки:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest -q --tb=short
+```
+
+Тесты создают отдельную базу `task_tracker_test_<uuid>` на сервере из `DATABASE_URL`, загружают SQL-схему и свежие тестовые данные, а затем удаляют её. Роль подключения должна иметь право `CREATEDB`. Данные рабочей базы не меняются. Каждый тест выполняется в откатываемой транзакции. Проверяются три списка, все поля сортировки, доступность записей и метаданных, некорректные параметры, схемы входных данных, единый формат ошибок, переходы статуса и описание OpenAPI.
+
+Для полного прогона Postman на такой же отдельной базе установите Node.js с `npx` и выполните:
+
+```powershell
+$env:RUN_POSTMAN = '1'
+python -m pytest tests/test_postman.py -q -s --tb=short
+Remove-Item Env:RUN_POSTMAN
+```
+
+Проверка сама запускает тестовый HTTP-сервер на свободном порту и Newman 6.2.2, затем останавливает сервер и удаляет временную базу. При первом запуске Newman загружается через `npx`.
+
+## Подготовка к следующему занятию: фильтры и агрегаты
+
+Фильтры добавляются к базовому `select()` до подсчёта `total`, сортировки и пагинации. Например, задачи проекта с определённым статусом и исполнителем:
+
+```python
+from sqlalchemy import func, select
+from app.models import Project, Task
+
+statement = select(Task).where(
+    Task.project_id == project_id,
+    Task.status == "in_progress",
+    Task.assignee_id == assignee_id,
+)
+# Нечувствительный к регистру поиск подстроки; %, _ и escape-символ экранируются.
+statement = statement.where(Task.title.icontains(search, autoescape=True))
+```
+
+Подходящие будущие фильтры: для задач — `project_id`, `assignee_id`, `status`, `priority`, диапазон `due_at`, `is_overdue`, поиск по заголовку и описанию; для проектов — имя и участие текущего пользователя; для пользователей — имя, логин и активность. При добавлении фильтров нужно сохранить текущие ограничения видимости. [Операторы сравнения и поиска SQLAlchemy](https://docs.sqlalchemy.org/en/20/core/operators.html).
+
+`JOIN` связывает строки таблиц, `LEFT OUTER JOIN` сохраняет проекты без задач. `GROUP BY` формирует группы, а `count`, `min`, `max`, `sum`, `avg` вычисляют агрегаты. Пример количества задач в каждом проекте, включая проекты с нулём задач:
+
+```python
+statement = (
+    select(Project.project_id, Project.name, func.count(Task.task_id).label("task_count"))
+    .outerjoin(Task, Task.project_id == Project.project_id)
+    .group_by(Project.project_id, Project.name)
+)
+```
+
+Здесь нужен `count(Task.task_id)`: `count(*)` посчитал бы также строку проекта без задачи. `WHERE` фильтрует строки до группировки, `HAVING` — результаты группировки, например `.having(func.count(Task.task_id) >= 3)`. Эти примеры предназначены для следующего задания; фильтры пока не являются query-параметрами API. [WHERE и JOIN](https://docs.sqlalchemy.org/en/20/tutorial/data_select.html#the-where-clause), [GROUP BY, HAVING и агрегаты](https://docs.sqlalchemy.org/en/20/tutorial/data_select.html#aggregate-functions-with-group-by-having).

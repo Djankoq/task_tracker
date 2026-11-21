@@ -1,22 +1,23 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.models import ProjectMember, User
-from app.schemas.common import ApiError
+from app.exceptions import ConflictError, ForbiddenError, ValidationError
+from app.schemas.common import ErrorResponse
 
 
 CRUD_ERRORS = {
-    400: {"model": ApiError, "description": "Invalid request data"},
-    401: {"model": ApiError, "description": "Invalid or expired session"},
-    403: {"model": ApiError, "description": "Insufficient permissions"},
-    404: {"model": ApiError, "description": "Record not found"},
+    400: {"model": ErrorResponse, "description": "Invalid request data"},
+    401: {"model": ErrorResponse, "description": "Invalid or expired session"},
+    403: {"model": ErrorResponse, "description": "Insufficient permissions"},
+    404: {"model": ErrorResponse, "description": "Record not found"},
+    409: {"model": ErrorResponse, "description": "Record conflict"},
 }
-DELETE_CONFLICT = {409: {"model": ApiError, "description": "Related records prevent deletion"}}
+DELETE_CONFLICT = {409: {"model": ErrorResponse, "description": "Related records prevent deletion"}}
 
 
 def visible_projects(user: User):
@@ -44,11 +45,16 @@ def write_transaction(db: Session, *, deleting: bool = False) -> Iterator[None]:
         db.rollback()
         code = getattr(error.orig, "pgcode", None)
         if code == "23503" and deleting:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Related records prevent deletion") from None
+            raise ConflictError("Related records prevent deletion") from None
+        if code == "23505":
+            raise ConflictError("A record with these unique values already exists") from None
         if code == "23503":
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid reference to a related record") from None
+            raise ValidationError("Invalid reference to a related record") from None
         if code == "23514":
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, error.orig.diag.message_primary) from None
+            raise ValidationError(error.orig.diag.message_primary) from None
         if code == "42501":
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions") from None
+            raise ForbiddenError("Insufficient permissions") from None
+        raise
+    except Exception:
+        db.rollback()
         raise

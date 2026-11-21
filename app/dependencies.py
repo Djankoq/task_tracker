@@ -1,13 +1,14 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, Path, Query, status
+from fastapi import Depends, Path, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.exceptions import ForbiddenError, UnauthorizedError
 from app.models import User
 from app.schemas.common import MAX_BIGINT
+from app.schemas.pagination import ProjectPagination, TaskPagination, UserPagination
 from app.services.user_service import get_user_by_session_token
 
 
@@ -22,11 +23,7 @@ def get_current_user(
 ) -> User:
     user = get_user_by_session_token(db, credentials.credentials) if credentials else None
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired session",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise UnauthorizedError()
     return user
 
 
@@ -35,16 +32,13 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 def require_admin(user: CurrentUser) -> User:
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator required")
+        raise ForbiddenError("Administrator required")
     return user
 
 
 Administrator = Annotated[User, Depends(require_admin)]
 
 
-class Pagination(BaseModel):
-    offset: int = Field(default=0, ge=0, le=MAX_BIGINT)
-    limit: int = Field(default=20, ge=1, le=100)
-
-
-Page = Annotated[Pagination, Query()]
+UserPage = Annotated[UserPagination, Query()]
+ProjectPage = Annotated[ProjectPagination, Query()]
+TaskPage = Annotated[TaskPagination, Query()]

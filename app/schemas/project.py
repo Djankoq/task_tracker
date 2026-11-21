@@ -1,7 +1,6 @@
-from pydantic import BaseModel, ConfigDict, with_config
-from typing_extensions import TypedDict
+from pydantic import BaseModel, ConfigDict
 
-from app.schemas.common import DatabaseText, NonBlankText
+from app.schemas.common import DatabaseText, NonBlankText, PatchModel, RecordId
 
 
 class ProjectCreate(BaseModel):
@@ -15,15 +14,14 @@ class ProjectReplace(ProjectCreate):
     description: DatabaseText
 
 
-@with_config(ConfigDict(extra="forbid"))
-class ProjectPatch(TypedDict, total=False):
-    name: NonBlankText
-    description: DatabaseText
+class ProjectPatch(PatchModel):
+    name: NonBlankText | None = None
+    description: DatabaseText | None = None
 
 
 class ProjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    project_id: int
-    name: str
-    description: str
+    project_id: RecordId
+    name: NonBlankText
+    description: DatabaseText
