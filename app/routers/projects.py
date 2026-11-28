@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.dependencies import Administrator, CurrentUser, Database, ProjectPage, PathId
 from app.exceptions import NotFoundError
-from app.models import Project, ProjectMember, User
+from app.models import Project, ProjectMember, Task, User
 from app.services.search import search_text
 from app.schemas.project import ProjectCreate, ProjectMemberRead, ProjectPatch, ProjectRead, ProjectReplace
 from app.schemas.common import PageResponse
@@ -52,6 +52,17 @@ def list_projects(db: Database, user: CurrentUser, page: ProjectPage) -> PageRes
     if page.has_tasks is not None:
         has_tasks = Project.tasks.any()
         statement = statement.where(has_tasks if page.has_tasks else ~has_tasks)
+    if page.task_count_min is not None or page.task_count_max is not None:
+        task_count = (
+            select(func.count(Task.task_id))
+            .where(Task.project_id == Project.project_id)
+            .correlate(Project)
+            .scalar_subquery()
+        )
+        if page.task_count_min is not None:
+            statement = statement.where(task_count >= page.task_count_min)
+        if page.task_count_max is not None:
+            statement = statement.where(task_count <= page.task_count_max)
     statement = search_text(statement, page.search, Project.name, Project.description)
     return paginate(db, statement, page, SORT_COLUMNS, Project.project_id, ProjectRead)
 

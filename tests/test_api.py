@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -104,6 +105,57 @@ def test_duplicate_sort_values_have_stable_pages(client):
     paged = [client.get(f"/projects/?sort_by=name&page={p}&per_page=1", headers=ADMIN).json()["items"][0] for p in range(1, 6)]
     assert paged == all_items
     assert [i["project_id"] for i in paged if i["name"] == "Identical"] == ids
+
+
+def test_user_id_range_with_role_filter_and_sorted_pages(client):
+    params = {"user_id_min": 2, "user_id_max": 4, "is_admin": False, "per_page": 1, "sort_order": "desc"}
+    for page, expected_id in enumerate((4, 3, 2), 1):
+        response = client.get("/users/", params={**params, "page": page}, headers=ADMIN)
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result["total"] == 3
+        assert result["total_pages"] == 3
+        assert [item["user_id"] for item in result["items"]] == [expected_id]
+
+
+def test_project_task_count_filter_includes_empty_projects_and_preserves_visibility(client):
+    created = client.post("/projects/", headers=ADMIN, json={"name": "Empty project"}).json()
+    empty = client.get("/projects/", params={"task_count_max": 0, "has_tasks": False}, headers=ADMIN)
+    assert [item["project_id"] for item in empty.json()["items"]] == [created["project_id"]]
+    exact = {"task_count_min": 2, "task_count_max": 2, "has_tasks": True}
+    admin = client.get("/projects/", params=exact, headers=ADMIN).json()
+    manager = client.get("/projects/", params=exact, headers=MANAGER).json()
+    assert [item["project_id"] for item in admin["items"]] == [2]
+    assert manager["total"] == 0
+
+
+def test_task_id_and_deadline_ranges_combine_with_search_and_status(client):
+    initial = client.get("/tasks/", params={"project_id": 1, "status": "todo"}, headers=MANAGER).json()
+    target = next(item for item in initial["items"] if item["title"] == "Подготовить стенд")
+    deadline = target["due_at"]
+    params = {
+        "project_id": 1, "status": "todo", "priority": "high", "search": "стенд",
+        "task_id_min": target["task_id"], "task_id_max": target["task_id"],
+        "due_from": deadline, "due_to": deadline, "sort_order": "desc", "per_page": 1,
+    }
+    result = client.get("/tasks/", params=params, headers=MANAGER).json()
+    assert result["total"] == 1
+    assert result["items"] == [target]
+    earlier = (datetime.fromisoformat(deadline) - timedelta(microseconds=1)).isoformat()
+    result = client.get("/tasks/", params={**params, "due_from": earlier, "due_to": earlier}, headers=MANAGER).json()
+    assert result["total"] == 0
+
+
+@pytest.mark.parametrize(("entity", "params"), [
+    ("users", {"user_id_min": 4, "user_id_max": 2}),
+    ("users", {"user_id_min": 0}),
+    ("projects", {"task_count_min": 3, "task_count_max": 2}),
+    ("projects", {"task_count_max": -1}),
+    ("tasks", {"task_id_min": 10, "task_id_max": 1}),
+    ("tasks", {"due_from": "2026-11-28T00:00:00Z", "due_to": "2026-11-27T00:00:00Z"}),
+])
+def test_invalid_filter_ranges(client, entity, params):
+    assert_error(client.get(f"/{entity}/", params=params, headers=ADMIN), 400, "validation_error")
 
 
 def test_auth_and_not_found(client):

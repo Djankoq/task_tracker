@@ -68,6 +68,10 @@ def list_tasks(db: Database, user: CurrentUser, page: TaskPage) -> PageResponse[
         value = getattr(page, field)
         if value is not None:
             statement = statement.where(getattr(Task, field) == value)
+    if page.task_id_min is not None:
+        statement = statement.where(Task.task_id >= page.task_id_min)
+    if page.task_id_max is not None:
+        statement = statement.where(Task.task_id <= page.task_id_max)
     if page.due_from is not None:
         statement = statement.where(Task.due_at >= page.due_from)
     if page.due_to is not None:

@@ -31,6 +31,10 @@ def list_users(db: Database, _: Administrator, page: UserPage) -> PageResponse[U
             ProjectMember.project_id == page.project_id, ProjectMember.removed_at.is_(None),
         )
         statement = statement.where(User.user_id.in_(members))
+    if page.user_id_min is not None:
+        statement = statement.where(User.user_id >= page.user_id_min)
+    if page.user_id_max is not None:
+        statement = statement.where(User.user_id <= page.user_id_max)
     statement = search_text(statement, page.search, User.login, User.display_name)
     return paginate(db, statement, page, SORT_COLUMNS, User.user_id, UserRead)
 

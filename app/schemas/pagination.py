@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Literal, Self
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
@@ -7,6 +8,14 @@ from app.schemas.task import TaskPriority, TaskStatus
 
 
 QueryId = Annotated[int, Field(gt=0, le=MAX_BIGINT)]
+QueryCount = Annotated[int, Field(ge=0, le=MAX_BIGINT)]
+
+
+def validate_range(
+    start: int | datetime | None, end: int | datetime | None, start_name: str, end_name: str
+) -> None:
+    if start is not None and end is not None and start > end:
+        raise ValueError(f"{start_name} must be on or before {end_name}")
 
 
 class Pagination(BaseModel):
@@ -32,14 +41,28 @@ class UserPagination(Pagination):
     is_active: bool | None = None
     is_admin: bool | None = None
     project_id: QueryId | None = None
+    user_id_min: QueryId | None = None
+    user_id_max: QueryId | None = None
     sort_by: Literal["user_id", "login", "display_name", "name", "is_admin"] = "user_id"
+
+    @model_validator(mode="after")
+    def valid_user_id_range(self) -> Self:
+        validate_range(self.user_id_min, self.user_id_max, "user_id_min", "user_id_max")
+        return self
 
 
 class ProjectPagination(Pagination):
     name: NonBlankText | None = None
     member_id: QueryId | None = None
     has_tasks: bool | None = None
+    task_count_min: QueryCount | None = None
+    task_count_max: QueryCount | None = None
     sort_by: Literal["project_id", "name", "description"] = "project_id"
+
+    @model_validator(mode="after")
+    def valid_task_count_range(self) -> Self:
+        validate_range(self.task_count_min, self.task_count_max, "task_count_min", "task_count_max")
+        return self
 
 
 class TaskPagination(Pagination):
@@ -47,6 +70,8 @@ class TaskPagination(Pagination):
     assignee_id: QueryId | None = None
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
+    task_id_min: QueryId | None = None
+    task_id_max: QueryId | None = None
     due_from: AwareDatetime | None = None
     due_to: AwareDatetime | None = None
     sort_by: Literal[
@@ -54,7 +79,7 @@ class TaskPagination(Pagination):
     ] = "task_id"
 
     @model_validator(mode="after")
-    def valid_due_range(self) -> Self:
-        if self.due_from and self.due_to and self.due_from > self.due_to:
-            raise ValueError("due_from must be on or before due_to")
+    def valid_ranges(self) -> Self:
+        validate_range(self.task_id_min, self.task_id_max, "task_id_min", "task_id_max")
+        validate_range(self.due_from, self.due_to, "due_from", "due_to")
         return self
