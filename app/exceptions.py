@@ -46,3 +46,24 @@ class ForbiddenError(AppError):
 class ServiceUnavailableError(AppError):
     status_code = 503
     code = "service_unavailable"
+
+
+class InvalidTaskTransitionError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("Invalid status transition")
+
+
+class ReviewReasonRequiredError(ValidationError):
+    def __init__(self) -> None:
+        super().__init__("A review return requires a reason")
+
+
+class TaskActionForbiddenError(ForbiddenError):
+    code = "task_action_forbidden"
+
+
+class TaskStatusConflictError(ConflictError):
+    code = "task_status_conflict"
+
+    def __init__(self, expected: str, current: str) -> None:
+        super().__init__(f"Task status must be {expected}; current status is {current}. Reload the task.")

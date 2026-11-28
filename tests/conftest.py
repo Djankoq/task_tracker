@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,8 +14,8 @@ from app.database import get_db
 from app.main import app
 
 
-@pytest.fixture(scope="session")
-def test_engine():
+@contextmanager
+def temporary_database():
     """Use a fresh database; never load fixtures into the development database."""
     url = get_database_url()
     database_name = "task_tracker_test_" + uuid4().hex
@@ -43,6 +44,19 @@ def test_engine():
         with connection.cursor() as cursor:
             cursor.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database_name)))
         connection.close()
+
+
+@pytest.fixture(scope="session")
+def test_engine():
+    with temporary_database() as engine:
+        yield engine
+
+
+@pytest.fixture
+def concurrent_engine():
+    # Concurrent requests commit independently; keep them out of the shared test database.
+    with temporary_database() as engine:
+        yield engine
 
 
 @pytest.fixture

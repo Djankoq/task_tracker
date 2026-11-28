@@ -1,6 +1,6 @@
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.common import NonBlankText, PatchModel, RecordId
 
@@ -44,6 +44,29 @@ class TaskPatch(PatchModel, ReviewFields):
     priority: TaskPriority | None = None
     status: TaskStatus | None = None
     review_reason: NonBlankText | None = None
+
+
+class ReviewAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SubmitReview(ReviewAction):
+    action: Literal["submit_review"]
+
+
+class ApproveReview(ReviewAction):
+    action: Literal["approve_review"]
+
+
+class RequestChanges(ReviewAction):
+    action: Literal["request_changes"]
+    reason: NonBlankText
+
+
+TaskTransition = Annotated[
+    SubmitReview | ApproveReview | RequestChanges,
+    Field(discriminator="action"),
+]
 
 
 class TaskRead(BaseModel):
